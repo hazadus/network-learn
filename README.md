@@ -4,6 +4,8 @@
 
 ## `socket` module
 
+Разбираемся с работой сокетов на простейших примерах.
+
 - Простейший эхосервер: [sockets/echo_server.py](sockets/echo_server.py)
 - Простейший клиент для эхосервера: [sockets/basic_client.py](sockets/basic_client.py)
 
