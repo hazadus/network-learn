@@ -16,6 +16,13 @@ SUPPORTED_VERSIONS = [
 
 
 class Request:
+    """
+    Represents HTTP Request.
+
+    References:
+     - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#http_requests
+    """
+
     def __init__(
         self,
         method: str,
@@ -51,6 +58,33 @@ class Request:
         return parse_qs(self.url.query)
 
 
+class Response:
+    """
+    Represents HTTP Response.
+
+    References:
+     - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#http_responses
+    """
+
+    def __init__(
+        self,
+        status: int,
+        reason: str,
+        headers: dict | None = None,
+        body: bytes | None = None,
+    ):
+        self.status = status
+        self.reason = reason
+        self.headers = headers
+        self.body = body
+
+    def __str__(self):
+        return (
+            f"<Response: [{self.status}] {self.reason} {self.headers} "
+            f"Body length: {0 if self.body is None else len(self.body)}>"
+        )
+
+
 def serve_forever(host: str, port: int):
     """
     Infinitely acccept client connections and process requests.
@@ -80,7 +114,10 @@ def serve_client(connection: socket.socket, client_address: Tuple[str, int]):
     try:
         request = parse_request(connection, client_address)
         print(datetime.now(), request)
+
         response = handle_request(request)
+        print(datetime.now(), response)
+
         send_response(connection, response)
     except ConnectionResetError:
         connection = None
@@ -162,10 +199,45 @@ def parse_request(
     return Request(method, target, version, headers, request_file, client_address)
 
 
-def handle_request(request): ...
+def handle_request(request: Request) -> Response:
+    """
+    Build `Response` instance depenging on `Request`.
+
+    :param request: request to handle
+    :return: filled `Response` instance
+    """
+    return Response(404, "Not Found", headers={"Connection": "close"})
 
 
-def send_response(connection: socket.socket, response): ...
+def send_response(connection: socket.socket, response: Response):
+    """
+    Serialize `Response` instance to proper HTTP response format and write it to client socket.
+
+    Reference:
+     - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#http_responses
+    :param connection: client socket connection to send response to
+    :param response: `Response` instance to send
+    """
+    response_file = connection.makefile("wb")
+
+    # Write HTTP status line
+    status_line = f"HTTP/1.1 {response.status} {response.reason}\r\n"
+    response_file.write(status_line.encode("iso-8859-1"))
+
+    # Write all response headers
+    for key, value in response.headers:
+        header_line = f"{key}: {value}\r\n"
+        response_file.write(header_line.encode("iso-8859-1"))
+
+    # Empty line means the end of headers
+    response_file.write(b"\r\n")
+
+    # Write the body, if present
+    if response.body:
+        response_file.write(response.body)
+
+    response_file.flush()
+    response_file.close()
 
 
 def send_error(connection: socket.socket, error): ...
