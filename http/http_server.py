@@ -6,6 +6,7 @@ import socket
 from datetime import datetime
 from io import BufferedReader
 from typing import Tuple
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
@@ -36,6 +37,18 @@ class Request:
             f"<Request: {self.client_host}:{self.client_port} {self.method} {self.target} {self.version} "
             f"{self.headers}>"
         )
+
+    @property
+    def url(self) -> ParseResult:
+        return urlparse(self.target)
+
+    @property
+    def path(self) -> str:
+        return self.url.path
+
+    @property
+    def query(self) -> dict[str, list[str]]:
+        return parse_qs(self.url.query)
 
 
 def serve_forever(host: str, port: int):
