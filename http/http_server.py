@@ -13,6 +13,13 @@ DEFAULT_PORT = 8000
 SUPPORTED_VERSIONS = [
     "HTTP/1.1",
 ]
+ALLOWED_HOSTS = [
+    DEFAULT_HOST,
+    f"{DEFAULT_HOST}:{DEFAULT_PORT}",
+    "127.0.0.1",
+    f"127.0.0.1:{DEFAULT_PORT}",
+]
+HEADER_ENCODING = "iso-8859-1"
 
 
 class Request:
@@ -85,6 +92,14 @@ class Response:
         )
 
 
+class HTTPError(Exception):
+    def __init__(self, status: int, reason: str, body: bytes | None = None):
+        super()
+        self.status = status
+        self.reason = reason
+        self.body = body
+
+
 def serve_forever(host: str, port: int):
     """
     Infinitely acccept client connections and process requests.
@@ -122,6 +137,7 @@ def serve_client(connection: socket.socket, client_address: Tuple[str, int]):
     except ConnectionResetError:
         connection = None
     except Exception as ex:
+        print(datetime.now(), "Error:", ex)
         send_error(connection, ex)
 
     if connection:
@@ -137,7 +153,7 @@ def parse_request_line(request_file: BufferedReader) -> Tuple[str, str, str]:
     :return: tuple of HTTP method, target, and HTTP version
     """
     line_bytes = request_file.readline()
-    request_line = str(line_bytes, "iso-8859-1").rstrip("\r\n")
+    request_line = str(line_bytes, HEADER_ENCODING).rstrip("\r\n")
     tokens = request_line.split(" ")
 
     # Expect exactly three tokens in request line - method, target, version:
@@ -166,7 +182,7 @@ def parse_request_headers(request_file: BufferedReader) -> dict:
 
     headers = {}
     for header in header_lines:
-        header = header.decode("iso-8859-1")
+        header = header.decode(HEADER_ENCODING)
         key, value = header.split(":", 1)
         headers[key] = value.rstrip("\r\n").lstrip()
 
@@ -196,6 +212,13 @@ def parse_request(
 
     headers = parse_request_headers(request_file)
 
+    # Check `Hosts` header
+    if not headers.get("Host"):
+        raise HTTPError(400, "Bad request")
+
+    if headers.get("Host") not in ALLOWED_HOSTS:
+        raise HTTPError(404, "Not found")
+
     return Request(method, target, version, headers, request_file, client_address)
 
 
@@ -206,7 +229,7 @@ def handle_request(request: Request) -> Response:
     :param request: request to handle
     :return: filled `Response` instance
     """
-    return Response(404, "Not Found", headers={"Connection": "close"})
+    return Response(200, "OK", headers={"Connection": "close"})
 
 
 def send_response(connection: socket.socket, response: Response):
@@ -222,12 +245,13 @@ def send_response(connection: socket.socket, response: Response):
 
     # Write HTTP status line
     status_line = f"HTTP/1.1 {response.status} {response.reason}\r\n"
-    response_file.write(status_line.encode("iso-8859-1"))
+    response_file.write(status_line.encode(HEADER_ENCODING))
 
     # Write all response headers
-    for key, value in response.headers:
-        header_line = f"{key}: {value}\r\n"
-        response_file.write(header_line.encode("iso-8859-1"))
+    if response.headers:
+        for key, value in response.headers.items():
+            header_line = f"{key}: {value}\r\n"
+            response_file.write(header_line.encode(HEADER_ENCODING))
 
     # Empty line means the end of headers
     response_file.write(b"\r\n")
@@ -240,7 +264,17 @@ def send_response(connection: socket.socket, response: Response):
     response_file.close()
 
 
-def send_error(connection: socket.socket, error): ...
+def send_error(connection: socket.socket, error: HTTPError):
+    try:
+        status = error.status
+        reason = error.reason
+        body = (error.body or error.reason).encode("utf-8")
+    except:
+        status = 500
+        reason = "Internal Server Error"
+        body = b"Internal Server Error"
+    response = Response(status, reason, {"Content-Length": len(body)}, body)
+    send_response(connection, response)
 
 
 if __name__ == "__main__":
