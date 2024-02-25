@@ -1,5 +1,6 @@
 """
 Very simple HTTP server.
+Serves static files.
 """
 
 import socket
@@ -229,7 +230,18 @@ def handle_request(request: Request) -> Response:
     :param request: request to handle
     :return: filled `Response` instance
     """
-    return Response(200, "OK", headers={"Connection": "close"})
+    if request.path not in ["/", "/index.html"]:
+        return Response(404, "Not found", headers={"Connection": "close"})
+
+    with open("./static/index.html", "rb") as file:
+        body = file.read()
+
+    headers = {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": len(body),
+    }
+
+    return Response(200, "OK", headers=headers, body=body)
 
 
 def send_response(connection: socket.socket, response: Response):
