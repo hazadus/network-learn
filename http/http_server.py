@@ -3,6 +3,7 @@ Very simple HTTP server.
 Serves static files.
 """
 
+import os.path
 import socket
 from datetime import datetime
 from io import BufferedReader
@@ -19,8 +20,33 @@ ALLOWED_HOSTS = [
     f"{DEFAULT_HOST}:{DEFAULT_PORT}",
     "127.0.0.1",
     f"127.0.0.1:{DEFAULT_PORT}",
+    "localhost",
+    f"localhost:{DEFAULT_PORT}",
 ]
 HEADER_ENCODING = "iso-8859-1"
+STATIC_ROOT = "./static"
+STATIC_DIR = os.path.abspath(STATIC_ROOT)
+EXTENSION_TO_MIME_TYPE = {
+    ".htm": "text/html; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".png": "image/png",
+    ".bin": "application/octet-stream",
+    ".css": "text/css",
+    ".csv": "text/csv",
+    ".gif": "image/gif",
+    ".ico": "image/vnd.microsoft.icon",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".js": "text/javascript",
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".mp4": "vide/mp4",
+    ".otf": "font/otf",
+    ".pdf": "application/pdf",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain",
+}
+DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 
 class Request:
@@ -223,6 +249,45 @@ def parse_request(
     return Request(method, target, version, headers, request_file, client_address)
 
 
+def get_content_type(request: Request) -> str:
+    """
+    Return MIME type based on file extension in request path.
+
+    :param request: Request to process
+    :return: MIME type based on file extension, or `DEFAULT_CONTENT_TYPE`
+    """
+    _, extension = os.path.splitext(request.path)
+    content_type = EXTENSION_TO_MIME_TYPE.get(extension, DEFAULT_CONTENT_TYPE)
+    return content_type
+
+
+def load_static_file(request: Request) -> Response:
+    """
+    Load static file into Response instance.
+
+    :param request: Request instance to process
+    :return: Response instance properly initialized with required data
+    :raise HTTPError: 404 error if file not found
+    """
+    path = os.path.sep.join([STATIC_DIR, request.path])
+
+    if not path.startswith(STATIC_DIR):
+        return Response(404, "Not found", headers={"Connection": "close"})
+
+    try:
+        with open(path, "rb") as file:
+            body = file.read()
+    except Exception as ex:
+        raise HTTPError(404, f"Not found. {ex}")
+
+    headers = {
+        "Content-Type": get_content_type(request),
+        "Content-Length": len(body),
+    }
+
+    return Response(200, "OK", headers=headers, body=body)
+
+
 def handle_request(request: Request) -> Response:
     """
     Build `Response` instance depenging on `Request`.
@@ -230,18 +295,12 @@ def handle_request(request: Request) -> Response:
     :param request: request to handle
     :return: filled `Response` instance
     """
-    if request.path not in ["/", "/index.html"]:
-        return Response(404, "Not found", headers={"Connection": "close"})
+    supported_methods = ["GET"]
 
-    with open("./static/index.html", "rb") as file:
-        body = file.read()
+    if request.method not in supported_methods:
+        raise HTTPError(400, f"Method {request.method} is not supported.")
 
-    headers = {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Length": len(body),
-    }
-
-    return Response(200, "OK", headers=headers, body=body)
+    return load_static_file(request)
 
 
 def send_response(connection: socket.socket, response: Response):
