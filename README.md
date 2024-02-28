@@ -7,13 +7,13 @@
 Разбираемся с работой сокетов на простейших примерах.
 
 - Простейший эхосервер: [sockets/echo_server.py](sockets/echo_server.py)
-- Простейший клиент для эхосервера: [sockets/basic_client.py](sockets/basic_client.py)
+- Клиент для эхосервера: [sockets/basic_client.py](sockets/basic_client.py)
 
 ## HTTP
 
 Изучаем работу протокола HTTP на практике.
 
-- Простейший HTTP-сервер с синхронной обработкой запросов: [http/http_server.py](http/http_server.py)
+- Простой HTTP-сервер с синхронной обработкой запросов: [http_server/http_server.py](http_server/http_server.py)
 
 ## References
 
