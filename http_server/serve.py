@@ -18,6 +18,7 @@ def serve_forever(host: str, port: int):
     :param port: HTTP server port
     """
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
         server_socket.bind((host, port))
