@@ -4,10 +4,10 @@ Contains stuff related with main server loop - serve and handle client requests.
 
 import socket
 from datetime import datetime
-from typing import Tuple
-from request import Request, parse_request
-from response import Response, load_path, send_response, send_error
+
 from exceptions import HTTPError
+from request import Request, parse_request
+from response import Response, load_path, send_error, send_response
 
 
 def serve_forever(host: str, port: int):
@@ -30,22 +30,21 @@ def serve_forever(host: str, port: int):
             print(datetime.now(), f"{client_host}:{client_port} connected...")
 
             try:
-                _serve_client(connection, (client_host, client_port))
+                _serve_client(connection)
             except Exception as ex:
                 print("Failed to serve client", ex)
     finally:
         server_socket.close()
 
 
-def _serve_client(connection: socket.socket, client_address: Tuple[str, int]):
+def _serve_client(connection: socket.socket):
     """
     Process request, then send back the response.
 
     :param connection: client connection socket
-    :param client_address: client address (host, port,); printed in console.
     """
     try:
-        request = parse_request(connection, client_address)
+        request = parse_request(connection)
         print(datetime.now(), request)
 
         response = _handle_request(request)

@@ -4,9 +4,10 @@ Response-related code.
 
 import os.path
 import socket
+
 import settings
-from request import Request
 from exceptions import HTTPError
+from request import Request
 
 
 class Response:

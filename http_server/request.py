@@ -7,6 +7,7 @@ import socket
 from io import BufferedReader
 from typing import Tuple
 from urllib.parse import ParseResult, parse_qs, urlparse
+
 import settings
 from exceptions import HTTPError
 
@@ -67,10 +68,7 @@ class Request:
         return content_type
 
 
-def parse_request(
-    connection: socket.socket,
-    client_address: Tuple[str, int],
-) -> Request:
+def parse_request(connection: socket.socket) -> Request:
     """
     Parse all neded data from request message into `Request` instance.
 
@@ -78,7 +76,6 @@ def parse_request(
      - https://docs.python.org/3/library/socket.html#socket.socket.makefile
      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages
     :param connection: client connection socket
-    :param client_address: tuple of client host and port
     :return: filled `Request` instance
     """
     # Represent socket connection as file-like object:
@@ -97,6 +94,7 @@ def parse_request(
     if headers.get("Host") not in settings.ALLOWED_HOSTS:
         raise HTTPError(404, "Not found")
 
+    client_address = connection.getpeername()
     return Request(method, target, version, headers, request_file, client_address)
 
 
