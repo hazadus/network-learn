@@ -1,7 +1,8 @@
 # HTTP Server ToDos
 
 - [X] Handle various MIME types by file extension.
-- [ ] Add support for showing a directory listing. If the user doesn’t specify a file in the URL, show a directory listing where each file name is a link to that file.
+- [X] Add support for showing a directory listing. If the user doesn’t specify a file in the URL, show a directory 
+  listing where each file name is a link to that file.
 - [ ] Загрузка файла по HTTP на сервер через форму
 - [ ] Параметризованные декораторы для определения routes
 

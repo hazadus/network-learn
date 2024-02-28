@@ -271,9 +271,6 @@ def load_static_file(request: Request) -> Response:
     """
     path = os.path.sep.join([STATIC_DIR, request.path])
 
-    if not path.startswith(STATIC_DIR):
-        return Response(404, "Not found", headers={"Connection": "close"})
-
     try:
         with open(path, "rb") as file:
             body = file.read()
@@ -288,6 +285,65 @@ def load_static_file(request: Request) -> Response:
     return Response(200, "OK", headers=headers, body=body)
 
 
+def load_directory_listing(request: Request) -> Response:
+    """
+    Create `Response` with directory listing.
+
+    :param request: request to handle
+    :return: `Response` instance with directory listing
+    """
+    host = request.headers.get("Host")
+    path = os.path.sep.join([STATIC_DIR, request.path])
+    listing = ""
+
+    for filename in os.listdir(path):
+        listing += (
+            f'<li><a href="{os.path.join(request.path, filename)}">{filename}</a></li>'
+        )
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Directory listing</title>
+        </head>
+        
+        <body>
+          <h1>{host}{request.path}</h1>
+          <ul>{listing}</ul>
+        </body>
+    </html>
+    """
+
+    headers = {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": len(html),
+    }
+    return Response(200, "OK", headers=headers, body=html.encode("utf-8"))
+
+
+def load_path(request: Request) -> Response:
+    """
+    Load static file or directory listing, depending on request.
+
+    :param request: request to handle
+    :return: `Response` instance filled with static file or directory listing
+    """
+    path = os.path.sep.join([STATIC_DIR, request.path])
+
+    # Ensure that the path exists, and user can't break out of our base directory:
+    if not path.startswith(STATIC_DIR) or not os.path.exists(path):
+        raise HTTPError(404, "Not found")
+
+    if os.path.isfile(path):
+        return load_static_file(request)
+
+    if os.path.isdir(path):
+        return load_directory_listing(request)
+
+
 def handle_request(request: Request) -> Response:
     """
     Build `Response` instance depenging on `Request`.
@@ -300,7 +356,7 @@ def handle_request(request: Request) -> Response:
     if request.method not in supported_methods:
         raise HTTPError(400, f"Method {request.method} is not supported.")
 
-    return load_static_file(request)
+    return load_path(request)
 
 
 def send_response(connection: socket.socket, response: Response):
