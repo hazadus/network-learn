@@ -4,9 +4,9 @@
 - [X] Add support for showing a directory listing. If the user doesn’t specify a file in the URL, show a directory 
   listing where each file name is a link to that file.
 - [X] Add more MIME types, test with m4a, mp4.
-- [ ] Decode URLs (cyrillic letters).
-- [ ] Add `.` & `..` links for subdirectories in directory listing.
-- [ ] 📁, 📄 icons in directory listing.
+- [X] Decode URLs (cyrillic letters).
+- [X] Add `.` & `..` links for subdirectories in directory listing.
+- [X] 📁, 📄 icons in directory listing.
 - [ ] In `send_response()`, add common headers (server, date, etc.).
 - [ ] Refactor functions in `request` module as class methods.
 - [ ] Add `HTTPNotFound` exception.

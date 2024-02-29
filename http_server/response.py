@@ -135,11 +135,27 @@ def _load_directory_listing(request: Request) -> Response:
     """
     host = request.headers.get("Host")
     path = os.path.sep.join([settings.STATIC_DIR, request.path])
-    listing = ""
 
-    for filename in os.listdir(path):
+    # Sort in a way that directories come first in the list:
+    dir_list = sorted(
+        os.listdir(path),
+        key=lambda name_: not os.path.isdir(os.path.sep.join([path, name_])),
+    )
+
+    listing = ""
+    if not request.path == "/":
+        parent_dir = os.path.abspath(os.path.sep.join([path, "../"]))
+        parent_dir = parent_dir[len(settings.STATIC_DIR) :]
+        listing = (
+            '<li>📁 <a href="/">.</a></li>\n'
+            f'<li>📁 <a href="{parent_dir}/">..</a></li>\n'
+        )
+
+    for name in dir_list:
+        full_path = os.path.sep.join([path, name])
+        icon = "📁" if os.path.isdir(full_path) else "📄"
         listing += (
-            f'<li><a href="{os.path.join(request.path, filename)}">{filename}</a></li>'
+            f'<li>{icon} <a href="{os.path.join(request.path, name)}">{name}</a></li>\n'
         )
 
     html = f"""
@@ -153,13 +169,15 @@ def _load_directory_listing(request: Request) -> Response:
 
         <body>
           <h1>{host}{request.path}</h1>
-          <ul>{listing}</ul>
+          <ul>\n{listing}</ul>
         </body>
     </html>
     """
 
+    # Encode *before* measuring `len(body)`!
+    body = html.encode("utf-8")
     headers = {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Length": len(html),
+        "Content-Length": len(body),
     }
-    return Response(200, "OK", headers=headers, body=html.encode("utf-8"))
+    return Response(200, "OK", headers=headers, body=body)
