@@ -6,7 +6,7 @@ import os.path
 import socket
 from io import BufferedReader
 from typing import Tuple
-from urllib.parse import ParseResult, parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 import settings
 from exceptions import HTTPError
@@ -48,7 +48,7 @@ class Request:
 
     @property
     def path(self) -> str:
-        return self.url.path
+        return unquote(self.url.path)
 
     @property
     def query(self) -> dict[str, list[str]]:
