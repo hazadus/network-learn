@@ -5,6 +5,7 @@ Contains stuff related with main server loop - serve and handle client requests.
 import socket
 from datetime import datetime
 
+import settings
 from exceptions import HTTPError
 from request import Request, parse_request
 from response import Response, load_path, send_error, send_response
@@ -23,11 +24,11 @@ def serve_forever(host: str, port: int):
     try:
         server_socket.bind((host, port))
         server_socket.listen()
-        print(f"HTTP server waiting for connection on {host}:{port}")
+        print(f"☣️🚀 {settings.SERVER_TITLE} waiting for connection on {host}:{port}")
 
         while True:
             connection, (client_host, client_port) = server_socket.accept()
-            print(datetime.now(), f"{client_host}:{client_port} connected...")
+            print(datetime.now(), f"🔌{client_host}:{client_port} connected...")
 
             try:
                 _serve_client(connection)
@@ -45,10 +46,10 @@ def _serve_client(connection: socket.socket):
     """
     try:
         request = parse_request(connection)
-        print(datetime.now(), request)
+        print(datetime.now(), "↘️", request)
 
         response = _handle_request(request)
-        print(datetime.now(), response)
+        print(datetime.now(), "↗️", response)
 
         send_response(connection, response)
     except ConnectionResetError:

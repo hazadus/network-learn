@@ -4,6 +4,8 @@ Response-related code.
 
 import os.path
 import socket
+from datetime import datetime
+from email import utils
 
 import settings
 from exceptions import HTTPError
@@ -27,7 +29,7 @@ class Response:
     ):
         self.status = status
         self.reason = reason
-        self.headers = headers
+        self._headers = headers
         self.body = body
 
     def __str__(self):
@@ -35,6 +37,15 @@ class Response:
             f"<Response: [{self.status}] {self.reason} {self.headers} "
             f"Body length: {0 if self.body is None else len(self.body)}>"
         )
+
+    @property
+    def headers(self) -> dict:
+        return {
+            "Connection": "close",
+            "Server": settings.SERVER_TITLE,
+            "Date": utils.format_datetime(datetime.now()),
+            **self._headers,
+        }
 
 
 def send_response(connection: socket.socket, response: Response):

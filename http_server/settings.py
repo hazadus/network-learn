@@ -3,11 +3,13 @@ All settings of HTTP Server are here.
 """
 
 import os
+import platform
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 STATIC_ROOT = "./static"
 STATIC_DIR = os.path.abspath(STATIC_ROOT)
+SERVER_TITLE = f"Hazardous HTTP Server (Python v.{platform.python_version()})"
 SUPPORTED_VERSIONS = [
     "HTTP/1.1",
 ]

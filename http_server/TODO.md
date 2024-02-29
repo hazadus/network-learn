@@ -7,14 +7,14 @@
 - [X] Decode URLs (cyrillic letters).
 - [X] Add `.` & `..` links for subdirectories in directory listing.
 - [X] 📁, 📄 icons in directory listing.
-- [ ] In `send_response()`, add common headers (server, date, etc.).
+- [X] In `send_response()`, add common headers (server, date, etc.).
 - [ ] Refactor functions in `request` module as class methods.
 - [ ] Add `HTTPNotFound` exception.
 - [ ] Configure logging.
 - [ ] Modify the client to be able to send payloads. You’ll need to be able to set the Content-Type and Content-Length based on the payload.
 - [ ] Modify the server to extract and print a payload sent by the client.
-- [ ] Загрузка файла по HTTP на сервер через форму
-- [ ] Параметризованные декораторы для определения routes
+- [ ] Загрузка файла по HTTP на сервер через форму.
+- [ ] Параметризованные декораторы для определения routes.
 
 ## References 
 
