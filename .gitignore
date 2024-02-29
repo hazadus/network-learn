@@ -165,3 +165,6 @@ docker/postgres/
 misc/cats/
 
 *.bin
+*.mp4
+*.m4a
+*.pdf
