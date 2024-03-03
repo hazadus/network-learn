@@ -15,6 +15,12 @@
 
 - Простой HTTP-сервер с синхронной обработкой запросов: [http_server/http_server.py](http_server/http_server.py)
 
+## DNS
+
+Изучаем работу DNS.
+
+- DNS resolver (используем библиотеку `dnspython`): [dns_resolver/dns_resolver.py](dns_resolver/dns_resolver.py)
+
 ## References
 
 - [`socket` — Low-level networking interface](https://docs.python.org/3/library/socket.html)

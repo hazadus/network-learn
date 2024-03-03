@@ -1,0 +1,6 @@
+click==8.1.7
+dnspython==2.6.1
+mypy-extensions==1.0.0
+packaging==23.2
+pathspec==0.12.1
+platformdirs==4.2.0
