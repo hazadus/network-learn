@@ -1,13 +1,57 @@
 import binascii
 import ctypes
+import random
 import socket
 import struct
+from dataclasses import dataclass
 from enum import IntEnum
+
+
+@dataclass
+class DNSHeader:
+    """
+    Represents DNS message header.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-26
+    """
+
+    id = random.randint(0, 65535)  # 16 bit: message identifier
+    qr = 0b0  # 1 bit: flag, query 0, response 1
+    opcode = 0b0000  # 4 bit: kind of query, 0 = standard query
+    aa = 0b0  # 1 bit: authoritative answer
+    tc = 0b0  # 1 bit: message truncated flag
+    rd = 0b1  # 1 bit: recursion desired flag
+    ra = 0b0  # 1 bit: recursion available flag (may be set in response)
+    z = 0b000  # 3 bit: reserved for future use, must be zero
+    rcode = 0b0000  # 4 bit: response code
+    qdcount = 0b0000000000000001  # 16 bit: number of questions
+    ancount = 0b0000000000000000  # 16 bit: number of answers
+    nscount = 0b0000000000000000  # 16 bit: number of authority records
+    arcount = 0b0000000000000000  # 16 bit: number of additional records
+
+    def as_hex_str(self) -> str:
+        params = str(self.qr)
+        params += str(self.opcode).zfill(4)
+        params += str(self.aa) + str(self.tc) + str(self.rd) + str(self.ra)
+        params += str(self.z).zfill(3)
+        params += str(self.rcode).zfill(4)
+
+        # Convert `params` "binary in string" to int, then format it as hex number in string:
+        params = f"{int(params, base=2):04x}"
+
+        header = ""
+        header += f"{self.id:04x}"
+        header += params
+        header += f"{self.qdcount:04x}"
+        header += f"{self.ancount:04x}"
+        header += f"{self.nscount:04x}"
+        header += f"{self.arcount:04x}"
+
+        return header
 
 
 class DNSHeaderBitFields(ctypes.BigEndianStructure):
     """
-    Represents DNS message header, 16 bit long.
+    Represents DNS message header parameters, 16 bit long.
     Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-26
     """
 
@@ -57,6 +101,39 @@ class QCLASS(IntEnum):
     """
 
     IN = 1
+
+
+@dataclass
+class DNSQuestion:
+    domain: str
+    qtype: QTYPE = QTYPE.A  # 16 bit: type = A records, i.e. "host address"
+    qclass: QCLASS = QCLASS.IN  # 16 bit: class = Internet
+
+    def _encode_domain_name(self) -> str:
+        """
+        Encode domain name for DNS Question in hex string representation.
+        :return: encoded domain name encoded as hex string
+        """
+        # QNAME a domain name represented as a sequence of labels, where each label consists of
+        # a length octet followed by that number of octets. The domain name terminates with the
+        # zero length octet for the null label of the root. Note that this field may be an odd
+        # number of octets; no padding is used.
+        qname = ""
+        addr_parts = self.domain.split(".")
+        for part in addr_parts:
+            addr_len = f"{len(part):02x}"
+            addr_part = binascii.hexlify(part.encode())
+            qname += addr_len
+            qname += addr_part.decode()
+
+        qname += "00"  # Terminating bit for QNAME
+        return qname
+
+    def as_hex_str(self):
+        question = self._encode_domain_name()
+        question += f"{self.qtype:04x}"  # 16 bit
+        question += f"{self.qclass:04x}"  # 16 bit
+        return question
 
 
 def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
@@ -235,60 +312,11 @@ def create_dns_message(domain: str) -> bytes:
     :param domain: domain name we want to look up
     :return: DNS message
     """
-    id_ = 0xAAAA  # 16 bit: message identifier
+    header = DNSHeader()
+    question = DNSQuestion(domain=domain)
 
-    # Message parameters
-    qr = 0b0  # 1 bit: flag, query 0, response 1
-    opcode = 0b0000 # 4 bit: kind of query, 0 = standard query
-    aa = 0b0  # 1 bit: authoritative answer
-    tc = 0b0  # 1 bit: message truncated flag
-    rd = 0b1  # 1 bit: recursion desired flag
-    ra = 0b0  # 1 bit: recursion available flag (may be set in response)
-    z = 0b000  # 3 bit: reserved for future use, must be zero
-    rcode = 0b0000 # 4 bit: response code
-
-    params = str(qr)
-    params += str(opcode).zfill(4)
-    params += str(aa) + str(tc) + str(rd) + str(ra)
-    params += str(z).zfill(3)
-    params += str(rcode).zfill(4)
-
-    # Convert `params` "binary in string" to int, then format it as hex number in string:
-    params = f"{int(params, base=2):04x}"
-
-    qdcount = 0b0000000000000001  # 16 bit: number of questions
-    ancount = 0b0000000000000000  # 16 bit: number of answers
-    nscount = 0b0000000000000000  # 16 bit: number of authority records
-    arcount = 0b0000000000000000  # 16 bit: number of additional records
-
-    message = ""
-    message += f"{id_:04x}"
-    message += params
-    message += f"{qdcount:04x}"
-    message += f"{ancount:04x}"
-    message += f"{nscount:04x}"
-    message += f"{arcount:04x}"
-
-    # QNAME a domain name represented as a sequence of labels, where each label consists of
-    # a length octet followed by that number of octets. The domain name terminates with the
-    # zero length octet for the null label of the root. Note that this field may be an odd
-    # number of octets; no padding is used.
-    addr_parts = domain.split(".")
-    for part in addr_parts:
-        addr_len = f"{len(part):02x}"
-        addr_part = binascii.hexlify(part.encode())
-        message += addr_len
-        message += addr_part.decode()
-
-    message += "00" # Terminating bit for QNAME
-
-    # QTYPE - Type of the query
-    qtype = QTYPE.A  # 16 bit: type = A records, i.e. "host address"
-    message += f"{qtype:04x}"
-
-    # QCLASS - Class of the query
-    qclass = QCLASS.IN  # 16 bit: class = Internet
-    message += f"{qclass:04x}"
+    message = header.as_hex_str()
+    message += question.as_hex_str()
 
     # Convert string hex representation into real bytes
     return binascii.unhexlify(message)
