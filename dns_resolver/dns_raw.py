@@ -2,6 +2,7 @@ import binascii
 import ctypes
 import socket
 import struct
+from enum import IntEnum
 
 
 class DNSHeaderBitFields(ctypes.BigEndianStructure):
@@ -20,6 +21,42 @@ class DNSHeaderBitFields(ctypes.BigEndianStructure):
         ("z", ctypes.c_uint16, 3),
         ("rcode", ctypes.c_uint16, 4),
     ]
+
+
+class RCODE(IntEnum):
+    """
+    Represents possible RCODE values.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-27
+    """
+
+    NO_ERROR = 0
+    FORMAT_ERROR = 1
+    SERVER_FAILURE = 2
+    NAME_ERROR = 3
+    NOT_IMPLEMENTED = 4
+    REFUSED = 5
+
+
+class QTYPE(IntEnum):
+    """
+    Represents possible QTYPE values.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
+    """
+
+    A = 1  # a host address
+    NS = 2  # an authoritative name server
+    CNAME = 5  # the canonical name for an alias
+    MX = 15  # mail exchange
+    AAAA = 28  # IPv6 host address
+
+
+class QCLASS(IntEnum):
+    """
+    Represents possible QCLASS values.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
+    """
+
+    IN = 1
 
 
 def send_udp_message(message_: str, address: str, port: int = 53) -> bytes:
@@ -49,17 +86,17 @@ def rcode_to_str(rcode: int) -> str:
     :param rcode: response code
     :return: RCODE description
     """
-    if rcode == 0:
+    if rcode == RCODE.NO_ERROR:
         return "No error"
-    elif rcode == 1:
+    elif rcode == RCODE.FORMAT_ERROR:
         return "Format error (name server could not interpret your request)"
-    elif rcode == 2:
+    elif rcode == RCODE.SERVER_FAILURE:
         return "Server failure"
-    elif rcode == 3:
+    elif rcode == RCODE.NAME_ERROR:
         return "Name Error (Domain does not exist)"
-    elif rcode == 4:
+    elif rcode == RCODE.NOT_IMPLEMENTED:
         return "Not implemented (name server does not support your request type)"
-    elif rcode == 5:
+    elif rcode == RCODE.REFUSED:
         return "Refused (name server refused your request for policy reasons)"
     else:
         return "WARNING: Unknown rcode"
@@ -72,15 +109,15 @@ def qtype_to_str(qtype: int) -> str:
     :param qtype: query type code
     :return: QTYPE description
     """
-    if qtype == 1:
+    if qtype == QTYPE.A:
         return "A"
-    elif qtype == 2:
+    elif qtype == QTYPE.NS:
         return "NS"
-    elif qtype == 5:
+    elif qtype == QTYPE.CNAME:
         return "CNAME"
-    elif qtype == 15:
+    elif qtype == QTYPE.MX:
         return "MX"
-    elif qtype == 28:
+    elif qtype == QTYPE.AAAA:
         return "AAAA"
     else:
         return "WARNING: Record type not decoded"
@@ -93,7 +130,7 @@ def class_to_str(qclass: int) -> str:
     :param qclass: QCLASS code
     :return: QCLASS description
     """
-    if qclass == 1:
+    if qclass == QCLASS.IN:
         return "IN"
     else:
         return "WARNING: Class not decoded"
@@ -160,7 +197,7 @@ def print_dns_response(raw_bytes: bytes) -> None:
             "!HHHIH", raw_bytes[offset : offset + 12]
         )
 
-        if atype == 1:
+        if atype == QTYPE.A:
             aaddr = (
                 socket.inet_ntop(
                     socket.AF_INET, raw_bytes[offset + 12 : offset + 12 + 4]
@@ -168,7 +205,7 @@ def print_dns_response(raw_bytes: bytes) -> None:
                 + " (IPv4)"
             )
             offset += 12 + 4
-        elif atype == 28:
+        elif atype == QTYPE.AAAA:
             aaddr = (
                 socket.inet_ntop(
                     socket.AF_INET6, raw_bytes[offset + 12 : offset + 12 + 16]
@@ -199,4 +236,7 @@ message = (
 
 if __name__ == "__main__":
     response = send_udp_message(message, "198.41.0.4", 53)
+    print_dns_response(response)
+
+    response = send_udp_message(message, "8.8.8.8", 53)
     print_dns_response(response)
