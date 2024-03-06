@@ -59,23 +59,23 @@ class QCLASS(IntEnum):
     IN = 1
 
 
-def send_udp_message(message_: str, address: str, port: int = 53) -> bytes:
+def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
     """
     Sends message to DNS server via UDP.
-    :param message_: should be a hexadecimal encoded string
+    :param message: actual bytes to send
     :param address: DNS server IP
     :param port: DNS server port
     :return: data received from DNS server
     """
-    message_ = message_.replace(" ", "").replace("\n", "")
     server_address = (address, port)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock.sendto(binascii.unhexlify(message_), server_address)
+        sock.sendto(message, server_address)
         data, _ = sock.recvfrom(4096)
     finally:
         sock.close()
+
     return data
 
 
@@ -229,14 +229,75 @@ def print_dns_response(raw_bytes: bytes) -> None:
         # TODO: decode Additional
 
 
-message = (
-    "AA AA 01 00 00 01 00 00 00 00 00 00 "
-    "07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01"
-)
+def create_dns_message(domain: str) -> bytes:
+    """
+    Compile DNS message ready to send via UDP.
+    :param domain: domain name we want to look up
+    :return: DNS message
+    """
+    id_ = 0xAAAA  # 16 bit: message identifier
+
+    # Message parameters
+    qr = 0b0  # 1 bit: flag, query 0, response 1
+    opcode = 0b0000 # 4 bit: kind of query, 0 = standard query
+    aa = 0b0  # 1 bit: authoritative answer
+    tc = 0b0  # 1 bit: message truncated flag
+    rd = 0b1  # 1 bit: recursion desired flag
+    ra = 0b0  # 1 bit: recursion available flag (may be set in response)
+    z = 0b000  # 3 bit: reserved for future use, must be zero
+    rcode = 0b0000 # 4 bit: response code
+
+    params = str(qr)
+    params += str(opcode).zfill(4)
+    params += str(aa) + str(tc) + str(rd) + str(ra)
+    params += str(z).zfill(3)
+    params += str(rcode).zfill(4)
+
+    # Convert `params` "binary in string" to int, then format it as hex number in string:
+    params = f"{int(params, base=2):04x}"
+
+    qdcount = 0b0000000000000001  # 16 bit: number of questions
+    ancount = 0b0000000000000000  # 16 bit: number of answers
+    nscount = 0b0000000000000000  # 16 bit: number of authority records
+    arcount = 0b0000000000000000  # 16 bit: number of additional records
+
+    message = ""
+    message += f"{id_:04x}"
+    message += params
+    message += f"{qdcount:04x}"
+    message += f"{ancount:04x}"
+    message += f"{nscount:04x}"
+    message += f"{arcount:04x}"
+
+    # QNAME a domain name represented as a sequence of labels, where each label consists of
+    # a length octet followed by that number of octets. The domain name terminates with the
+    # zero length octet for the null label of the root. Note that this field may be an odd
+    # number of octets; no padding is used.
+    addr_parts = domain.split(".")
+    for part in addr_parts:
+        addr_len = f"{len(part):02x}"
+        addr_part = binascii.hexlify(part.encode())
+        message += addr_len
+        message += addr_part.decode()
+
+    message += "00" # Terminating bit for QNAME
+
+    # QTYPE - Type of the query
+    qtype = QTYPE.A  # 16 bit: type = A records, i.e. "host address"
+    message += f"{qtype:04x}"
+
+    # QCLASS - Class of the query
+    qclass = QCLASS.IN  # 16 bit: class = Internet
+    message += f"{qclass:04x}"
+
+    # Convert string hex representation into real bytes
+    return binascii.unhexlify(message)
+
 
 if __name__ == "__main__":
-    response = send_udp_message(message, "198.41.0.4", 53)
+    msg = create_dns_message("rss.hazadus.ru")
+    response = send_udp_message(msg, "198.41.0.4")
     print_dns_response(response)
 
-    response = send_udp_message(message, "8.8.8.8", 53)
+    response = send_udp_message(msg, "8.8.8.8")
     print_dns_response(response)
