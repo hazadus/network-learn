@@ -49,9 +49,30 @@ class DNSHeader:
 
         return header
 
+    def _rcode_to_str(self) -> str:
+        """
+        Convert response code to description string.
+        Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-27
+        :return: RCODE description
+        """
+        if self.rcode == RCODE.NO_ERROR:
+            return "No error"
+        elif self.rcode == RCODE.FORMAT_ERROR:
+            return "Format error (name server could not interpret your request)"
+        elif self.rcode == RCODE.SERVER_FAILURE:
+            return "Server failure"
+        elif self.rcode == RCODE.NAME_ERROR:
+            return "Name Error (Domain does not exist)"
+        elif self.rcode == RCODE.NOT_IMPLEMENTED:
+            return "Not implemented (name server does not support your request type)"
+        elif self.rcode == RCODE.REFUSED:
+            return "Refused (name server refused your request for policy reasons)"
+        else:
+            return "WARNING: Unknown rcode"
+
     def pretty_print(self):
         print("Message ID: %i" % self.id)
-        print("Response code: %s" % rcode_to_str(self.rcode))
+        print("Response code: %s" % self._rcode_to_str())
         print(
             "Counts: Query %i, Answer %i, Authority %i, Additional %i"
             % (self.qdcount, self.ancount, self.nscount, self.arcount)
@@ -61,8 +82,6 @@ class DNSHeader:
     def from_bytes(reader: BytesIO) -> "DNSHeader":
         """
         Parse header from DNS message and create `DNSHeader` instance.
-        :param reader:
-        :return:
         """
         header_struct = struct.Struct("!H2sHHHH")
         header_raw = reader.read(header_struct.size)
@@ -192,11 +211,18 @@ class DNSQuestion:
         qname += "00"  # Terminating bit for QNAME
         return qname
 
-    def as_hex_str(self):
+    def as_hex_str(self) -> str:
         question = self._encode_domain_name()
         question += f"{self.qtype:04x}"  # 16 bit
         question += f"{self.qclass:04x}"  # 16 bit
         return question
+
+    @staticmethod
+    def from_bytes(reader: BytesIO) -> "DNSQuestion":
+        name = decode_name(reader)
+        data = reader.read(4)
+        qtype, qclass = struct.unpack("!HH", data)
+        return DNSQuestion(domain=name.decode(), qtype=qtype, qclass=qclass)
 
 
 @dataclass
@@ -220,9 +246,39 @@ class DNSRecord:
             f"rdlength={len(self.rdata)}, Address: {self.address}"
         )
 
+    @staticmethod
+    def from_bytes(reader: BytesIO) -> "DNSRecord":
+        name = decode_name(reader)
+        # HHIH means: 2-byte type, 2-byte class, 4-byte ttl, 2-byte rdlength = 10 bytes
+        # Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
+        record_struct = struct.Struct("!HHIH")
+        data = reader.read(record_struct.size)
+        type_, class_, ttl, rdlength = record_struct.unpack(data)
+
+        rdata_pos = reader.tell()
+        rdata = reader.read(rdlength)
+
+        # Parse address (IP or domain) from rdata
+        if type_ == QTYPE.A:
+            address = socket.inet_ntop(socket.AF_INET, rdata) + " (IPv4)"
+        elif type_ == QTYPE.AAAA:
+            address = socket.inet_ntop(socket.AF_INET6, rdata) + " (IPv6)"
+        elif type_ == QTYPE.NS:
+            reader.seek(rdata_pos)
+            address = decode_name(reader=reader).decode()
+        else:
+            address = "WARNING: Unknown address format."
+
+        return DNSRecord(name, type_, class_, ttl, rdata, address)
+
 
 @dataclass
 class DNSMessage:
+    """
+    Represents full DNS message.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
+    """
+
     header: DNSHeader
     questions: list[DNSQuestion]
     answers: list[DNSRecord]
@@ -231,11 +287,11 @@ class DNSMessage:
 
     @staticmethod
     def from_bytes(reader: BytesIO) -> "DNSMessage":
-        header = DNSHeader.from_bytes(reader=reader)
-        questions = [parse_question(reader=reader) for _ in range(header.qdcount)]
-        answers = [parse_record(reader=reader) for _ in range(header.ancount)]
-        authorities = [parse_record(reader=reader) for _ in range(header.nscount)]
-        additionals = [parse_record(reader=reader) for _ in range(header.arcount)]
+        header = DNSHeader.from_bytes(reader)
+        questions = [DNSQuestion.from_bytes(reader) for _ in range(header.qdcount)]
+        answers = [DNSRecord.from_bytes(reader) for _ in range(header.ancount)]
+        authorities = [DNSRecord.from_bytes(reader) for _ in range(header.nscount)]
+        additionals = [DNSRecord.from_bytes(reader) for _ in range(header.arcount)]
         return DNSMessage(
             header=header,
             questions=questions,
@@ -250,29 +306,6 @@ class DNSMessage:
         [print(answ) for answ in self.answers]
         [print(ns) for ns in self.authorities]
         [print(ar) for ar in self.additionals]
-
-
-def rcode_to_str(rcode: int) -> str:
-    """
-    Convert response code to description string.
-    Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-27
-    :param rcode: response code
-    :return: RCODE description
-    """
-    if rcode == RCODE.NO_ERROR:
-        return "No error"
-    elif rcode == RCODE.FORMAT_ERROR:
-        return "Format error (name server could not interpret your request)"
-    elif rcode == RCODE.SERVER_FAILURE:
-        return "Server failure"
-    elif rcode == RCODE.NAME_ERROR:
-        return "Name Error (Domain does not exist)"
-    elif rcode == RCODE.NOT_IMPLEMENTED:
-        return "Not implemented (name server does not support your request type)"
-    elif rcode == RCODE.REFUSED:
-        return "Refused (name server refused your request for policy reasons)"
-    else:
-        return "WARNING: Unknown rcode"
 
 
 def qtype_to_str(qtype: int) -> str:
@@ -309,6 +342,36 @@ def class_to_str(qclass: int) -> str:
         return "WARNING: Class not decoded"
 
 
+def decode_name(reader: BytesIO) -> bytes:
+    parts = []
+    while (length := reader.read(1)[0]) != 0:
+        # Check if two upper bits are set - it means we have to "decompress" the name:
+        if length & 0b1100_0000:
+            parts.append(decode_compressed_name(length, reader))
+            break
+        else:
+            parts.append(reader.read(length))
+    return b".".join(parts)
+
+
+def decode_compressed_name(length, reader):
+    """
+    Reference : https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
+    :param length:
+    :param reader:
+    :return:
+    """
+    # Get bottom 6 bits and the following byte, and convert the two bytes to int
+    pointer_bytes = bytes([length & 0b0011_1111]) + reader.read(1)
+    pointer = struct.unpack("!H", pointer_bytes)[0]
+    # Save position, seek to position decoded above, read name, restore position:
+    current_pos = reader.tell()
+    reader.seek(pointer)
+    result = decode_name(reader)
+    reader.seek(current_pos)
+    return result
+
+
 def create_dns_message(domain: str) -> bytes:
     """
     Compile DNS message ready to send via UDP.
@@ -343,68 +406,6 @@ def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
         sock.close()
 
     return data
-
-
-def decode_name(reader: BytesIO) -> bytes:
-    parts = []
-    while (length := reader.read(1)[0]) != 0:
-        # Check if two upper bits are set - it means we have to "decompress" the name:
-        if length & 0b1100_0000:
-            parts.append(decode_compressed_name(length, reader))
-            break
-        else:
-            parts.append(reader.read(length))
-    return b".".join(parts)
-
-
-def decode_compressed_name(length, reader):
-    """
-    Reference : https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
-    :param length:
-    :param reader:
-    :return:
-    """
-    # Get bottom 6 bits and the following byte, and convert the two bytes to int
-    pointer_bytes = bytes([length & 0b0011_1111]) + reader.read(1)
-    pointer = struct.unpack("!H", pointer_bytes)[0]
-    # Save position, seek to position decoded above, read name, restore position:
-    current_pos = reader.tell()
-    reader.seek(pointer)
-    result = decode_name(reader)
-    reader.seek(current_pos)
-    return result
-
-
-def parse_question(reader: BytesIO) -> DNSQuestion:
-    name = decode_name(reader)
-    data = reader.read(4)
-    qtype, qclass = struct.unpack("!HH", data)
-    return DNSQuestion(domain=name.decode(), qtype=qtype, qclass=qclass)
-
-
-def parse_record(reader: BytesIO) -> DNSRecord:
-    name = decode_name(reader)
-    # Read 10 bytes: type (2), class (2), ttl (4), rdlength (2)
-    # Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
-    data = reader.read(10)
-    # HHIH means: 2-byte int, 2-byte-int, 4-byte int, 2-byte int
-    type_, class_, ttl, rdlength = struct.unpack("!HHIH", data)
-
-    rdata_pos = reader.tell()
-    rdata = reader.read(rdlength)
-
-    # Parse address (IP or domain) from rdata
-    if type_ == QTYPE.A:
-        address = socket.inet_ntop(socket.AF_INET, rdata) + " (IPv4)"
-    elif type_ == QTYPE.AAAA:
-        address = socket.inet_ntop(socket.AF_INET6, rdata) + " (IPv6)"
-    elif type_ == QTYPE.NS:
-        reader.seek(rdata_pos)
-        address = decode_name(reader=reader).decode()
-    else:
-        address = "WARNING: Unknown address format."
-
-    return DNSRecord(name, type_, class_, ttl, rdata, address)
 
 
 if __name__ == "__main__":
