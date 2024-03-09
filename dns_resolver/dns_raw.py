@@ -5,6 +5,7 @@ import socket
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
+from io import BytesIO
 
 
 @dataclass
@@ -14,19 +15,19 @@ class DNSHeader:
     Reference: https://datatracker.ietf.org/doc/html/rfc1035#page-26
     """
 
-    id = random.randint(0, 65535)  # 16 bit: message identifier
-    qr = 0b0  # 1 bit: flag, query 0, response 1
-    opcode = 0b0000  # 4 bit: kind of query, 0 = standard query
-    aa = 0b0  # 1 bit: authoritative answer
-    tc = 0b0  # 1 bit: message truncated flag
-    rd = 0b1  # 1 bit: recursion desired flag
-    ra = 0b0  # 1 bit: recursion available flag (may be set in response)
-    z = 0b000  # 3 bit: reserved for future use, must be zero
-    rcode = 0b0000  # 4 bit: response code
-    qdcount = 0b0000000000000001  # 16 bit: number of questions
-    ancount = 0b0000000000000000  # 16 bit: number of answers
-    nscount = 0b0000000000000000  # 16 bit: number of authority records
-    arcount = 0b0000000000000000  # 16 bit: number of additional records
+    id: int = random.randint(0, 65535)  # 16 bit: message identifier
+    qr: int = 0b0  # 1 bit: flag, query 0, response 1
+    opcode: int = 0b0000  # 4 bit: kind of query, 0 = standard query
+    aa: int = 0b0  # 1 bit: authoritative answer
+    tc: int = 0b0  # 1 bit: message truncated flag
+    rd: int = 0b1  # 1 bit: recursion desired flag
+    ra: int = 0b0  # 1 bit: recursion available flag (may be set in response)
+    z: int = 0b000  # 3 bit: reserved for future use, must be zero
+    rcode: int = 0b0000  # 4 bit: response code
+    qdcount: int = 0b0000000000000001  # 16 bit: number of questions
+    ancount: int = 0b0000000000000000  # 16 bit: number of answers
+    nscount: int = 0b0000000000000000  # 16 bit: number of authority records
+    arcount: int = 0b0000000000000000  # 16 bit: number of additional records
 
     def as_hex_str(self) -> str:
         params = str(self.qr)
@@ -47,6 +48,57 @@ class DNSHeader:
         header += f"{self.arcount:04x}"
 
         return header
+
+    def pretty_print(self):
+        print("Message ID: %i" % self.id)
+        print("Response code: %s" % rcode_to_str(self.rcode))
+        print(
+            "Counts: Query %i, Answer %i, Authority %i, Additional %i"
+            % (self.qdcount, self.ancount, self.nscount, self.arcount)
+        )
+
+    @staticmethod
+    def from_bytes(reader: BytesIO) -> "DNSHeader":
+        """
+        Parse header from DNS message and create `DNSHeader` instance.
+        :param reader:
+        :return:
+        """
+        header_struct = struct.Struct("!H2sHHHH")
+        header_raw = reader.read(header_struct.size)
+
+        # Print out the message header
+        bitfields = DNSHeaderBitFields()
+        bitfields_raw = bytearray()
+        # Unpack format "!H2sHHHH" will spread 12 raw_bytes to the following variables:
+        (
+            hdr_message_id,  # int, 2 b
+            bitfields_raw,  # bytes, 2 b
+            hdr_qdcount,  # int, 2 b
+            hdr_ancount,  # int, 2 b
+            hdr_nscount,  # int, 2 b
+            hdr_arcount,  # int, 2 b
+        ) = header_struct.unpack(header_raw)
+
+        # Move raw header bytes to the `bitfields` struct memory location
+        # so we can access its members:
+        ctypes.memmove(ctypes.addressof(bitfields), bitfields_raw, 2)
+
+        return DNSHeader(
+            id=hdr_message_id,
+            qr=bitfields.qr,
+            opcode=bitfields.opcode,
+            aa=bitfields.aa,
+            tc=bitfields.tc,
+            rd=bitfields.rd,
+            ra=bitfields.ra,
+            z=bitfields.z,
+            rcode=bitfields.rcode,
+            qdcount=hdr_qdcount,
+            ancount=hdr_ancount,
+            nscount=hdr_nscount,
+            arcount=hdr_arcount,
+        )
 
 
 class DNSHeaderBitFields(ctypes.BigEndianStructure):
@@ -105,9 +157,20 @@ class QCLASS(IntEnum):
 
 @dataclass
 class DNSQuestion:
+    """
+    Represents Question section of the DNS message.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
+    """
+
     domain: str
     qtype: QTYPE = QTYPE.A  # 16 bit: type = A records, i.e. "host address"
     qclass: QCLASS = QCLASS.IN  # 16 bit: class = Internet
+
+    def __str__(self):
+        return (
+            f"DNSQuestion(domain={self.domain}, qtype={self.qtype} ({qtype_to_str(self.qtype)}), "
+            f"qclass={self.qclass} ({class_to_str(self.qclass)}))"
+        )
 
     def _encode_domain_name(self) -> str:
         """
@@ -136,24 +199,57 @@ class DNSQuestion:
         return question
 
 
-def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
+@dataclass
+class DNSRecord:
     """
-    Sends message to DNS server via UDP.
-    :param message: actual bytes to send
-    :param address: DNS server IP
-    :param port: DNS server port
-    :return: data received from DNS server
+    Represents DNS resource record.
+    Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
     """
-    server_address = (address, port)
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.sendto(message, server_address)
-        data, _ = sock.recvfrom(4096)
-    finally:
-        sock.close()
+    name: bytes
+    type_: QTYPE
+    class_: QCLASS
+    ttl: int
+    rdata: bytes
+    address: str
 
-    return data
+    def __str__(self):
+        return (
+            f"DNSRecord(name={self.name}, type_={self.type_} ({qtype_to_str(self.type_)}), "
+            f"class_={self.class_} ({class_to_str(self.class_)}), ttl={self.ttl}, rdata={self.rdata}) "
+            f"rdlength={len(self.rdata)}, Address: {self.address}"
+        )
+
+
+@dataclass
+class DNSMessage:
+    header: DNSHeader
+    questions: list[DNSQuestion]
+    answers: list[DNSRecord]
+    authorities: list[DNSRecord]
+    additionals: list[DNSRecord]
+
+    @staticmethod
+    def from_bytes(reader: BytesIO) -> "DNSMessage":
+        header = DNSHeader.from_bytes(reader=reader)
+        questions = [parse_question(reader=reader) for _ in range(header.qdcount)]
+        answers = [parse_record(reader=reader) for _ in range(header.ancount)]
+        authorities = [parse_record(reader=reader) for _ in range(header.nscount)]
+        additionals = [parse_record(reader=reader) for _ in range(header.arcount)]
+        return DNSMessage(
+            header=header,
+            questions=questions,
+            answers=answers,
+            authorities=authorities,
+            additionals=additionals,
+        )
+
+    def pretty_print(self):
+        self.header.pretty_print()
+        [print(q) for q in self.questions]
+        [print(answ) for answ in self.answers]
+        [print(ns) for ns in self.authorities]
+        [print(ar) for ar in self.additionals]
 
 
 def rcode_to_str(rcode: int) -> str:
@@ -213,99 +309,6 @@ def class_to_str(qclass: int) -> str:
         return "WARNING: Class not decoded"
 
 
-def print_dns_response(raw_bytes: bytes) -> None:
-    print("Server Response")
-    print("---------------")
-
-    # Print out the message header
-    bitfields = DNSHeaderBitFields()
-    bitfields_raw = bytearray()
-    # Unpack format "!H2sHHHH" will spread 12 raw_bytes to the following variables:
-    (
-        hdr_message_id,  # int, 2 b
-        bitfields_raw,  # bytes, 2 b
-        hdr_qdcount,  # int, 2 b
-        hdr_ancount,  # int, 2 b
-        hdr_nscount,  # int, 2 b
-        hdr_arcount,  # int, 2 b
-    ) = struct.unpack("!H2sHHHH", raw_bytes[0:12])
-
-    # Move raw header bytes to the `bitfields` struct memory location
-    # so we can access its members:
-    ctypes.memmove(ctypes.addressof(bitfields), bitfields_raw, 2)
-
-    print("Message ID: %i" % hdr_message_id)
-    print("Response code: %s" % rcode_to_str(bitfields.rcode))
-    print(
-        "Counts: Query %i, Answer %i, Authority %i, Additional %i"
-        % (hdr_qdcount, hdr_ancount, hdr_nscount, hdr_arcount)
-    )
-
-    # Print out each question header
-    offset = 12
-    for x in range(0, hdr_qdcount):
-        qname = ""
-        start = True
-        while True:
-            # "B" is for unsigned char, integer, 1 byte:
-            qname_len = struct.unpack("B", raw_bytes[offset : offset + 1])[0]
-            if qname_len == 0:
-                offset += 1
-                break  # Finished parsing out qname
-            elif not start:
-                qname += "."
-            qname += raw_bytes[offset + 1 : offset + 1 + qname_len].decode()
-            offset += 1 + qname_len
-            start = False
-
-        # Unpack 2 bytes to each variable:
-        (qtype, qclass) = struct.unpack("!HH", raw_bytes[offset : offset + 4])
-
-        print("Question %i:" % (x + 1))
-        print("  Name: %s" % qname)
-        print("  Type: %s" % qtype_to_str(qtype))
-        print("  Class: %s" % class_to_str(qclass))
-
-        offset += 4
-
-    # Print out each answer header
-    for x in range(0, hdr_ancount):
-        (aname, atype, aclass, attl, ardlength) = struct.unpack(
-            "!HHHIH", raw_bytes[offset : offset + 12]
-        )
-
-        if atype == QTYPE.A:
-            aaddr = (
-                socket.inet_ntop(
-                    socket.AF_INET, raw_bytes[offset + 12 : offset + 12 + 4]
-                )
-                + " (IPv4)"
-            )
-            offset += 12 + 4
-        elif atype == QTYPE.AAAA:
-            aaddr = (
-                socket.inet_ntop(
-                    socket.AF_INET6, raw_bytes[offset + 12 : offset + 12 + 16]
-                )
-                + " (IPv6)"
-            )
-            offset += 12 + 16
-        else:
-            aaddr = "WARNING: Addr format not IPv4 or IPv6"
-
-        print("Answer %i:" % (x + 1))
-        print("  Name: 0x%x" % aname)
-        print(
-            "  Type: %s, Class: %s, TTL: %i"
-            % (qtype_to_str(atype), class_to_str(aclass), attl)
-        )
-        print("  RDLength: %i bytes" % ardlength)
-        print("  Addr: %s" % aaddr)
-
-        # TODO: decode Authority
-        # TODO: decode Additional
-
-
 def create_dns_message(domain: str) -> bytes:
     """
     Compile DNS message ready to send via UDP.
@@ -322,10 +325,94 @@ def create_dns_message(domain: str) -> bytes:
     return binascii.unhexlify(message)
 
 
+def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
+    """
+    Sends message to DNS server via UDP.
+    :param message: actual bytes to send
+    :param address: DNS server IP
+    :param port: DNS server port
+    :return: data received from DNS server
+    """
+    server_address = (address, port)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.sendto(message, server_address)
+        data, _ = sock.recvfrom(4096)
+    finally:
+        sock.close()
+
+    return data
+
+
+def decode_name(reader: BytesIO) -> bytes:
+    parts = []
+    while (length := reader.read(1)[0]) != 0:
+        # Check if two upper bits are set - it means we have to "decompress" the name:
+        if length & 0b1100_0000:
+            parts.append(decode_compressed_name(length, reader))
+            break
+        else:
+            parts.append(reader.read(length))
+    return b".".join(parts)
+
+
+def decode_compressed_name(length, reader):
+    """
+    Reference : https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
+    :param length:
+    :param reader:
+    :return:
+    """
+    # Get bottom 6 bits and the following byte, and convert the two bytes to int
+    pointer_bytes = bytes([length & 0b0011_1111]) + reader.read(1)
+    pointer = struct.unpack("!H", pointer_bytes)[0]
+    # Save position, seek to position decoded above, read name, restore position:
+    current_pos = reader.tell()
+    reader.seek(pointer)
+    result = decode_name(reader)
+    reader.seek(current_pos)
+    return result
+
+
+def parse_question(reader: BytesIO) -> DNSQuestion:
+    name = decode_name(reader)
+    data = reader.read(4)
+    qtype, qclass = struct.unpack("!HH", data)
+    return DNSQuestion(domain=name.decode(), qtype=qtype, qclass=qclass)
+
+
+def parse_record(reader: BytesIO) -> DNSRecord:
+    name = decode_name(reader)
+    # Read 10 bytes: type (2), class (2), ttl (4), rdlength (2)
+    # Reference: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
+    data = reader.read(10)
+    # HHIH means: 2-byte int, 2-byte-int, 4-byte int, 2-byte int
+    type_, class_, ttl, rdlength = struct.unpack("!HHIH", data)
+
+    rdata_pos = reader.tell()
+    rdata = reader.read(rdlength)
+
+    # Parse address (IP or domain) from rdata
+    if type_ == QTYPE.A:
+        address = socket.inet_ntop(socket.AF_INET, rdata) + " (IPv4)"
+    elif type_ == QTYPE.AAAA:
+        address = socket.inet_ntop(socket.AF_INET6, rdata) + " (IPv6)"
+    elif type_ == QTYPE.NS:
+        reader.seek(rdata_pos)
+        address = decode_name(reader=reader).decode()
+    else:
+        address = "WARNING: Unknown address format."
+
+    return DNSRecord(name, type_, class_, ttl, rdata, address)
+
+
 if __name__ == "__main__":
     msg = create_dns_message("rss.hazadus.ru")
     response = send_udp_message(msg, "198.41.0.4")
-    print_dns_response(response)
 
-    response = send_udp_message(msg, "8.8.8.8")
-    print_dns_response(response)
+    # msg = create_dns_message("hazadus.ru")
+    # response = send_udp_message(msg, "8.8.8.8")
+
+    received_msg = DNSMessage.from_bytes(reader=BytesIO(response))
+    received_msg.pretty_print()
