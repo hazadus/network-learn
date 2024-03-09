@@ -1,3 +1,7 @@
+"""
+Resolve domain names using DNS messages sent via UPD, without 3rd-party libraries.
+"""
+
 import binascii
 import ctypes
 import random
@@ -260,9 +264,9 @@ class DNSRecord:
 
         # Parse address (IP or domain) from rdata
         if type_ == QTYPE.A:
-            address = socket.inet_ntop(socket.AF_INET, rdata) + " (IPv4)"
+            address = socket.inet_ntop(socket.AF_INET, rdata)
         elif type_ == QTYPE.AAAA:
-            address = socket.inet_ntop(socket.AF_INET6, rdata) + " (IPv6)"
+            address = socket.inet_ntop(socket.AF_INET6, rdata)
         elif type_ == QTYPE.NS:
             reader.seek(rdata_pos)
             address = decode_name(reader=reader).decode()
@@ -306,6 +310,18 @@ class DNSMessage:
         [print(answ) for answ in self.answers]
         [print(ns) for ns in self.authorities]
         [print(ar) for ar in self.additionals]
+
+    @property
+    def nameserver_ip(self) -> str | None:
+        for record in self.additionals:
+            if record.type_ == QTYPE.A:
+                return record.address
+
+    @property
+    def nameserver_name(self) -> str | None:
+        for record in self.authorities:
+            if record.type_ == QTYPE.NS:
+                return record.address
 
 
 def qtype_to_str(qtype: int) -> str:
@@ -378,7 +394,7 @@ def create_dns_message(domain: str) -> bytes:
     :param domain: domain name we want to look up
     :return: DNS message
     """
-    header = DNSHeader()
+    header = DNSHeader(rd=0)  # No recursion
     question = DNSQuestion(domain=domain)
 
     message = header.as_hex_str()
@@ -408,12 +424,36 @@ def send_udp_message(message: bytes, address: str, port: int = 53) -> bytes:
     return data
 
 
+def resolve(domain: str) -> str:
+    """
+    Resolve domain name.
+    :param domain: domain name to resolve
+    :return: IP address of the `domain`
+    """
+    # Root server IP (list of all root servers - https://www.iana.org/domains/root/servers):
+    nameserver = "198.41.0.4"
+    while True:
+        print(f"Querying {nameserver} for {domain}")
+        msg = create_dns_message(domain)
+        response = send_udp_message(msg, nameserver)
+        received_msg = DNSMessage.from_bytes(reader=BytesIO(response))
+
+        if len(received_msg.answers):
+            return received_msg.answers[0].address
+        elif received_msg.nameserver_ip:
+            nameserver = received_msg.nameserver_ip
+        elif received_msg.nameserver_name:
+            nameserver = resolve(received_msg.nameserver_name)
+        else:
+            raise Exception(f"Can't resolve {domain}!")
+
+
 if __name__ == "__main__":
-    msg = create_dns_message("rss.hazadus.ru")
-    response = send_udp_message(msg, "198.41.0.4")
-
-    # msg = create_dns_message("hazadus.ru")
-    # response = send_udp_message(msg, "8.8.8.8")
-
-    received_msg = DNSMessage.from_bytes(reader=BytesIO(response))
-    received_msg.pretty_print()
+    domains = [
+        "hazadus.ru",
+        "rss.hazadus.ru",
+        "github.com",
+        "python.org",
+        "twitter.com",
+    ]
+    [print(f"{domain} IP is", resolve(domain), "\n") for domain in domains]

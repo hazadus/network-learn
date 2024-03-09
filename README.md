@@ -33,12 +33,14 @@
 Изучаем работу DNS.
 
 - DNS resolver (используем библиотеку `dnspython`): [dns_resolver/dns_resolver.py](dns_resolver/dns_resolver.py)
-- Отправляем запросы к DNS серверу по UDP вручную и печатаем ответ: [dns_resolver/dns_raw.py](dns_resolver/dns_raw.py)
+- Отправляем запросы к DNS серверу по UDP вручную, резолвим доменное имя в IP (только стандартные средства Python): 
+  [dns_resolver/dns_raw.py](dns_resolver/dns_raw.py)
 
 ### References
 
 - [Let's hand write DNS messages](https://web.archive.org/web/20180919041301/https://routley.io/tech/2017/12/28/hand-writing-dns-messages.html)
 - [RFC 1035: 4.1.1. Header section format](https://datatracker.ietf.org/doc/html/rfc1035#page-26)
+- [IANA List of Root Servers](https://www.iana.org/domains/root/servers)
 - [Lab 8: Network Socket Programming (Intermediate)](https://ecs-network.serv.pacific.edu/ecpe-170/lab/lab-network-inter)
 - [`struct`: Byte Order, Size, and Alignment](https://docs.python.org/3.12/library/struct.html#byte-order-size-and-alignment)
 - [`struct`: Format Characters](https://docs.python.org/3.12/library/struct.html#format-characters)
