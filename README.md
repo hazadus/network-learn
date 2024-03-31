@@ -1,6 +1,6 @@
-# 🕸️🖥️ network-learn
+# 🕸️🖥️🐍 network-learn
 
-В этом репозитории на практике изучаю работу с сетью.
+В этом репозитории на практике изучаю работу с сетью из Python.
 
 ----
 
@@ -17,14 +17,6 @@
 - [Introducing The Sockets API](https://beej.us/guide/bgnet0/html/split/introducing-the-sockets-api.html#introducing-the-sockets-api)
 - [Beej’s Guide to Network Programming](https://beej.us/guide/bgnet) – optional, for C devs.
 - [Socket Programming HOWTO](https://docs.python.org/3.12/howto/sockets.html) in Python 3.12 documentation.
-
-----
-
-## HTTP
-
-Изучаем работу протокола HTTP на практике.
-
-- Простой HTTP-сервер с синхронной обработкой запросов: [http_server/http_server.py](http_server/http_server.py)
 
 ----
 
@@ -45,3 +37,25 @@
 - [`struct`: Byte Order, Size, and Alignment](https://docs.python.org/3.12/library/struct.html#byte-order-size-and-alignment)
 - [`struct`: Format Characters](https://docs.python.org/3.12/library/struct.html#format-characters)
 - [`ctypes`: `BigEndianStructure`](https://docs.python.org/3.12/library/ctypes.html#ctypes.BigEndianStructure)
+
+----
+
+## HTTP
+
+Изучаем работу протокола HTTP на практике.
+
+- Простой HTTP-сервер с синхронной обработкой запросов: [http_server/http_server.py](http_server/http_server.py)
+
+----
+
+## WSGI
+
+Разбираемся со спецификацией WSGI со стороны клиента и сервера.
+
+- Базовое WSGI-приложение (запускается встроенным в Python WSGI-сервером), выводит содержимое словаря `environ`: 
+  [wsgi/wsgi_app.py](wsgi/wsgi_app.py)
+
+### References
+
+- [PEP 3333 – Python Web Server Gateway Interface v1.0.1](https://peps.python.org/pep-3333/)
+- [WSGI Tutorial](https://wsgi.tutorial.codepoint.net/intro)
