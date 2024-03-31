@@ -50,13 +50,22 @@
 
 ## WSGI
 
-Разбираемся со спецификацией WSGI со стороны клиента и сервера.
+Разбираемся со спецификацией WSGI со стороны приложения и сервера.
 
 - Базовое WSGI-приложение (запускается встроенным в Python WSGI-сервером), выводит содержимое словаря `environ`: 
   [wsgi/environ.py](wsgi/environ.py)
 - Приложение WSGI с простой маршрутизацией, по типу Flask: [wsgi/routes.py](wsgi/routes.py)
+- WSGI сервер: [wsgi/server.py](wsgi/server.py)
+
+Испытать одновременно сервер и приложение:
+```bash
+python server.py routes:application
+curl -X GET http://127.0.0.1:8000/hello
+curl -X GET http://127.0.0.1:8000/hello/Alexander
+```
 
 ### References
 
 - [PEP 3333 – Python Web Server Gateway Interface v1.0.1](https://peps.python.org/pep-3333/)
 - [WSGI Tutorial](https://wsgi.tutorial.codepoint.net/intro)
+- [Let’s Build A Web Server. Part 2](https://ruslanspivak.com/lsbaws-part2/)
