@@ -53,7 +53,8 @@
 Разбираемся со спецификацией WSGI со стороны клиента и сервера.
 
 - Базовое WSGI-приложение (запускается встроенным в Python WSGI-сервером), выводит содержимое словаря `environ`: 
-  [wsgi/wsgi_app.py](wsgi/wsgi_app.py)
+  [wsgi/environ.py](wsgi/environ.py)
+- Приложение WSGI с простой маршрутизацией, по типу Flask: [wsgi/routes.py](wsgi/routes.py)
 
 ### References
 
